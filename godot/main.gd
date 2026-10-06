@@ -14,6 +14,8 @@ const Inbox := preload("res://inbox.gd")
 const PORT := 8777
 const AWAY_AFTER := 120.0          # seconds without mouse movement before you count as away
 const ESCALATE_TO_CURSOR := 45.0   # an unanswered blocker/question/done flies to your cursor
+const CURSOR_SETTLE := 1.5         # ...and only flies again once the cursor has rested this long
+const CURSOR_REFLY := 400.0        # ...this far from where the genie hovers
 const TAP_GLASS_AFTER := 180.0     # then a blocker/question starts tapping the glass
 const TAP_GLASS_EVERY := 20.0
 const INFO_SHOWN_FOR := 20.0
@@ -279,7 +281,11 @@ func _update_flow() -> void:
 		stage = 1
 		_play("alarm" if kind != "done" else "sparkle")
 		genie_art.target_pose = "point"
-	if stage >= 1:
+		genie_target = _near_cursor()
+	# Fly over once, then hold still so it can be clicked. Only follow again when the
+	# cursor has come to rest somewhere far away.
+	if stage >= 1 and now - last_move > CURSOR_SETTLE \
+			and genie_target.distance_to(_near_cursor()) > CURSOR_REFLY * sc:
 		genie_target = _near_cursor()
 	if kind != "done" and age > TAP_GLASS_AFTER and now - last_tap > TAP_GLASS_EVERY:
 		stage = 2
