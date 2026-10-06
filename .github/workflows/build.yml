@@ -19,7 +19,7 @@ jobs:
   windows:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Fetch Godot and the Windows export template
         run: |
@@ -45,7 +45,7 @@ jobs:
           cp -r claude-plugin client dist/GenieBuddy/
           cd dist && zip -qr GenieBuddy-windows-x64.zip GenieBuddy
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: GenieBuddy-windows-x64
           path: dist/GenieBuddy-windows-x64.zip
