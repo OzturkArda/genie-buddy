@@ -13,9 +13,9 @@ const Inbox := preload("res://inbox.gd")
 
 const PORT := 8777
 const AWAY_AFTER := 120.0          # seconds without mouse movement before you count as away
-const ESCALATE_TO_CURSOR := 45.0   # an unanswered blocker/question/done flies to your cursor
-const CURSOR_SETTLE := 1.5         # ...and only flies again once the cursor has rested this long
-const CURSOR_REFLY := 400.0        # ...this far from where the genie hovers
+const NUDGE_AFTER := 45.0          # an unanswered blocker/question/done starts nudging at the lamp
+const NUDGE_EVERY := 5.0           # ...once per this many seconds
+const NUDGE_HOP := 0.8             # ...with a double hop lasting this long
 const TAP_GLASS_AFTER := 180.0     # then a blocker/question starts tapping the glass
 const TAP_GLASS_EVERY := 20.0
 const INFO_SHOWN_FOR := 20.0
@@ -66,6 +66,8 @@ var last_move := 0.0
 var muted := false
 var now := 0.0
 var shake := 0.0
+var hop := 0.0          # 0..1 height of the nudge hop
+var last_nudge := -1
 var shake_off := Vector2.ZERO
 var lamp_shake := 0.0
 var smoke := []
@@ -258,6 +260,7 @@ func _on_return() -> void:
 
 
 func _update_flow() -> void:
+	hop = 0.0
 	if away or dragging:
 		return
 	if current == null:
@@ -277,16 +280,22 @@ func _update_flow() -> void:
 		if age > INFO_SHOWN_FOR:
 			_resolve(current, "seen")
 		return
-	if stage == 0 and age > ESCALATE_TO_CURSOR:
+	if stage == 0 and age > NUDGE_AFTER:
 		stage = 1
 		_play("alarm" if kind != "done" else "sparkle")
-		genie_art.target_pose = "point"
-		genie_target = _near_cursor()
-	# Fly over once, then hold still so it can be clicked. Only follow again when the
-	# cursor has come to rest somewhere far away.
-	if stage >= 1 and now - last_move > CURSOR_SETTLE \
-			and genie_target.distance_to(_near_cursor()) > CURSOR_REFLY * sc:
-		genie_target = _near_cursor()
+	# Unanswered: stay at the lamp and nudge in place with a hop, a wave and a puff.
+	if stage >= 1:
+		var n := floori((age - NUDGE_AFTER) / NUDGE_EVERY)
+		var t := age - NUDGE_AFTER - n * NUDGE_EVERY
+		if n != last_nudge:
+			last_nudge = n
+			_puff(_spout(), 6, 0.9)
+		if t < NUDGE_HOP:
+			hop = absf(sin(t / NUDGE_HOP * PI * 2.0))
+			genie_art.target_pose = "celebrate" if kind == "done" else "summon"
+			celebrate_until = now + 0.1
+		else:
+			genie_art.target_pose = "worried" if kind == "blocker" else "point"
 	if kind != "done" and age > TAP_GLASS_AFTER and now - last_tap > TAP_GLASS_EVERY:
 		stage = 2
 		last_tap = now
@@ -299,8 +308,7 @@ func _update_flow() -> void:
 
 func _animate(delta: float) -> void:
 	var home := _home_genie_pos()
-	if not out and stage == 0:
-		genie_target = home
+	genie_target = home
 	genie_pos = genie_pos.lerp(genie_target, 1.0 - exp(-delta * 3.0))
 	var near_home := genie_pos.distance_to(home) < 40.0 * sc
 	if out:
@@ -316,7 +324,7 @@ func _animate(delta: float) -> void:
 	genie_art.position.x = GenieArt.W if facing_left else 0.0
 	var tip := Vector2(GenieArt.W - TIP.x if facing_left else TIP.x, TIP.y) * px
 	genie_tex.pivot_offset = tip
-	genie_tex.position = genie_pos + shake_off
+	genie_tex.position = genie_pos + shake_off + Vector2(0, -hop * 7.0 * px)
 	genie_tex.scale = Vector2.ONE * (0.1 + 0.9 * ease(emerge, 0.4))
 	genie_tex.modulate.a = clampf(emerge * 1.6, 0.0, 1.0)
 	genie_tex.visible = emerge > 0.01
@@ -403,6 +411,7 @@ func _show(it: Dictionary) -> void:
 	shown_at = now
 	stage = 0
 	last_tap = now
+	last_nudge = -1
 	var opts: Array = it.options.duplicate()
 	if opts.is_empty():
 		opts = ["Got it"]
@@ -670,12 +679,6 @@ func _home_genie_pos() -> Vector2:
 	var tip := Vector2(GenieArt.W - TIP.x if facing_left else TIP.x, TIP.y) * px
 	return _clamp_genie(_spout() - tip + Vector2(0, 2 * px))
 
-
-func _near_cursor() -> Vector2:
-	var m := Vector2(DisplayServer.mouse_get_position() - screen.position)
-	var size := Vector2(GenieArt.W, GenieArt.H) * px
-	var side := -1.0 if m.x > screen.size.x * 0.5 else 1.0
-	return _clamp_genie(Vector2(m.x + side * size.x * 0.55 - size.x * 0.5, m.y - size.y * 0.3))
 
 
 # --- effects ------------------------------------------------------------------

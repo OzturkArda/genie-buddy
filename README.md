@@ -2,7 +2,7 @@
 
 A pixel-art genie lives in a lamp on your taskbar. When your AI agent finishes a long job,
 gets stuck or has a question, the genie comes out of the lamp and tells you. If you don't
-notice, it flies over to your mouse. You can answer its questions with a click, and the
+notice, it hops and waves until you do. You can answer its questions with a click, and the
 answer goes back to the agent.
 
 It works with Claude Code and Codex out of the box, and with any other tool that can send an
@@ -102,9 +102,9 @@ curl -X POST http://127.0.0.1:8777/poke -H "Content-Type: application/json" \
 
 | Message kind | What happens |
 |---|---|
-| `done` | The genie celebrates and shows the news. If you don't click within 45 seconds, it flies to your mouse. |
-| `question` | The genie points at its bubble, with one button per option. Your click goes back to the agent. |
-| `blocker` | The genie looks worried and lightning flashes. It flies to your mouse after 45 seconds and starts shaking the screen after 3 minutes. |
+| `done` | The genie celebrates and shows the news. If you don't click within 45 seconds, it starts hopping and waving above the lamp every few seconds. |
+| `question` | The genie points at its bubble, with one button per option. Your click goes back to the agent. Unanswered, it hops and waves after 45 seconds and starts shaking after 3 minutes. |
+| `blocker` | The genie looks worried and lightning flashes. It hops and waves after 45 seconds and starts shaking after 3 minutes. |
 | `info`, `progress` | Shown for 20 seconds, then the genie goes back into the lamp. |
 | A watched job goes quiet | If an agent stops sending heartbeats, the genie warns you that the job has gone quiet. |
 | You're away | When the mouse hasn't moved for 2 minutes, the genie holds its news and the lamp glows. When you come back, it greets you with a summary. |
