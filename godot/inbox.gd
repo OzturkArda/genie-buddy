@@ -5,7 +5,7 @@ extends Node
 ##   /hook/claude, /hook/codex                  raw hook events from Claude Code and Codex
 ## It turns all of them into calls on the genie (main.gd).
 
-const VERSION := "0.2.1"
+const VERSION := "0.2.2"
 const LONG_TURN := 60.0  # a Claude Code turn at least this long earns a "finished" poke
 const MCP_INSTRUCTIONS := "Genie Buddy is a character on the user's desktop. Call poke to tell the user something they should not miss while away from the terminal (a long job finished, a blocker, a question), and heartbeat while watching a long-running job so the genie notices if you go silent."
 const MCP_TOOLS := [
