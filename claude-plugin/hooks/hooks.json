@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "curl -s -m 3 -X POST http://127.0.0.1:8777/hook/claude -H \"Content-Type: application/json\" --data-binary @-", "timeout": 5 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "curl -s -m 3 -X POST http://127.0.0.1:8777/hook/claude -H \"Content-Type: application/json\" --data-binary @-", "timeout": 5 }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "curl -s -m 3 -X POST http://127.0.0.1:8777/hook/claude -H \"Content-Type: application/json\" --data-binary @-", "timeout": 5 }] }]
+  }
+}

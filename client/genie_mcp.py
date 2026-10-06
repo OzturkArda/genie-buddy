@@ -2,7 +2,8 @@
 # requires-python = ">=3.11"
 # dependencies = ["mcp>=1.2,<2", "psutil"]
 # ///
-"""MCP server that lets Claude Code and Codex agents summon Genie Buddy.
+"""Command-based MCP bridge to Genie Buddy, for MCP clients that cannot use its HTTP URL
+(http://127.0.0.1:8777/mcp) directly.
 
 Run with uv so the dependencies resolve on their own:
   claude mcp add -s user genie -- uv run --script /path/to/genie-buddy/client/genie_mcp.py

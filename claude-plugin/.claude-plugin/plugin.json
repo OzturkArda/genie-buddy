@@ -1,0 +1,9 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "genie-buddy",
+  "version": "0.2.0",
+  "description": "Connects Claude Code to Genie Buddy: the desktop genie pops out when a long turn finishes or Claude needs you, and agents get poke / heartbeat tools.",
+  "author": { "name": "OzturkArda" },
+  "homepage": "https://github.com/OzturkArda/genie-buddy",
+  "license": "MIT"
+}

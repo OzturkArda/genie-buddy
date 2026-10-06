@@ -1,0 +1,57 @@
+name: build
+
+# Builds GenieBuddy.exe on every push and pull request. A pushed tag like v0.2.0
+# also publishes the zip as a GitHub release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: 4.7.1
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Godot and the Windows export template
+        run: |
+          base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          curl -sSfL -o godot.zip "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip && mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot-bin
+          curl -sSfL -o templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          dest=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p "$dest"
+          unzip -q -j templates.tpz templates/windows_release_x86_64.exe templates/version.txt -d "$dest"
+
+      - name: Export
+        run: |
+          mkdir -p build
+          ./godot-bin --headless --path godot --import
+          ./godot-bin --headless --path godot --export-release "Windows" ../build/GenieBuddy.exe
+          test -s build/GenieBuddy.exe
+
+      - name: Package
+        run: |
+          mkdir -p dist/GenieBuddy
+          cp build/GenieBuddy.exe LICENSE dist/GenieBuddy/
+          cp -r claude-plugin client dist/GenieBuddy/
+          cd dist && zip -qr GenieBuddy-windows-x64.zip GenieBuddy
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GenieBuddy-windows-x64
+          path: dist/GenieBuddy-windows-x64.zip
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/GenieBuddy-windows-x64.zip --title "Genie Buddy $GITHUB_REF_NAME" --generate-notes

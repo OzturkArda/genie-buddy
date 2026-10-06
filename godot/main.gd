@@ -1,7 +1,7 @@
 extends Node2D
 ## Genie Buddy: a desktop companion that lives in a lamp on the taskbar and comes out
 ## when an agent finishes something or needs you. Agents talk to it over HTTP on
-## 127.0.0.1:8777 (client: ../client/genie.py, MCP: ../client/genie_mcp.py).
+## 127.0.0.1:8777; inbox.gd speaks plain JSON, MCP and Claude Code / Codex hooks.
 ##
 ## The window covers the work area, is transparent, and lets clicks pass through
 ## everywhere except over the lamp, the genie and its speech bubble.
@@ -9,6 +9,7 @@ extends Node2D
 const Chime := preload("res://chime.gd")
 const GenieArt := preload("res://genie_art.gd")
 const LampArt := preload("res://lamp_art.gd")
+const Inbox := preload("res://inbox.gd")
 
 const PORT := 8777
 const AWAY_AFTER := 120.0          # seconds without mouse movement before you count as away
@@ -41,8 +42,7 @@ var btn_row: HBoxContainer
 var player: AudioStreamPlayer
 var sounds := {}
 var tray: StatusIndicator
-var server := TCPServer.new()
-var conns := []
+var inbox: Node
 
 var items := []        # pokes: id, kind, title, body, agent, options, status, answer, created, snoozed_until
 var next_id := 1
@@ -106,7 +106,9 @@ func _ready() -> void:
 	genie_target = genie_pos
 	last_mouse = DisplayServer.mouse_get_position()
 
-	var err := server.listen(PORT, "127.0.0.1")
+	inbox = Inbox.new(self)
+	add_child(inbox)
+	var err: int = inbox.listen(PORT)
 	if err == OK:
 		_show_transient({"kind": "genie", "title": "At your service.",
 				"body": "Listening for agents on 127.0.0.1:%d. Rub the lamp to call me." % PORT,
@@ -189,6 +191,9 @@ func _build_tray() -> void:
 				img.set_pixel(x, y, Color("c0392b") if y % 3 else Color("e8b531"))
 	img.set_pixel(13, 18, Color.WHITE)
 	img.set_pixel(19, 18, Color.WHITE)
+	var big := img.duplicate()
+	big.resize(64, 64, Image.INTERPOLATE_NEAREST)
+	DisplayServer.set_icon(big)
 	tray = StatusIndicator.new()
 	tray.icon = ImageTexture.create_from_image(img)
 	tray.tooltip = "Genie Buddy — left click: rub the lamp, right click: menu"
@@ -207,7 +212,7 @@ func _on_tray(button: int, _pos: Vector2i) -> void:
 
 func _process(delta: float) -> void:
 	now += delta
-	_poll_http()
+	inbox.poll()
 	_watch_presence()
 	if now >= next_job_check:
 		next_job_check = now + 1.0
@@ -438,7 +443,7 @@ func _show_watch_list() -> void:
 	var lines := []
 	for job in jobs:
 		var j: Dictionary = jobs[job]
-		lines.append("• %s — %s · %s ago%s" % [job, j.agent, _ago(now - j.last),
+		lines.append("• %s — %s · %s ago%s" % [job, j.agent, ago(now - j.last),
 				("\n   " + j.detail) if j.detail != "" else ""])
 	if lines.is_empty():
 		_show_transient({"kind": "genie", "title": "All quiet, master.", "body": "No jobs are reporting to me.",
@@ -501,7 +506,7 @@ func _on_choice(choice: String) -> void:
 		_close_bubble()
 		match choice:
 			"Test poke":
-				_add_item({"kind": "question", "agent": "Genie (test)", "title": "Integration tests failed on the nightly build. Retry them?",
+				add_item({"kind": "question", "agent": "Genie (test)", "title": "Integration tests failed on the nightly build. Retry them?",
 						"body": "Every other job passed. The failure looks like a flaky timeout.",
 						"options": ["Retry", "Leave it"]})
 			"Mute":
@@ -573,7 +578,7 @@ func _play(key: String) -> void:
 	player.play()
 
 
-func _add_item(b: Dictionary) -> Dictionary:
+func add_item(b: Dictionary) -> Dictionary:
 	var kind := str(b.get("kind", "info"))
 	if not KIND_RANK.has(kind):
 		kind = "info"
@@ -595,17 +600,39 @@ func _add_item(b: Dictionary) -> Dictionary:
 	return it
 
 
+func item_by_id(id: int):
+	for it in items:
+		if it.id == id:
+			return it
+	return null
+
+
+func heartbeat(job: String, agent: String, detail: String, every: float, state: String) -> int:
+	if state != "running":
+		jobs.erase(job)
+	else:
+		jobs[job] = {"agent": agent, "detail": detail.left(200), "every": maxf(10.0, every), "last": now, "quiet": false}
+	return jobs.size()
+
+
+func status() -> Dictionary:
+	var watching := {}
+	for job in jobs:
+		watching[job] = {"agent": jobs[job].agent, "detail": jobs[job].detail, "seconds_since": int(now - jobs[job].last)}
+	return {"version": Inbox.VERSION, "pending": _pending().size(), "away": away, "watching": watching}
+
+
 func _check_jobs() -> void:
 	for job in jobs:
 		var j: Dictionary = jobs[job]
 		if not j.quiet and now - j.last > j.every * 2.0 + 30.0:
 			j.quiet = true
-			_add_item({"kind": "blocker", "agent": j.agent, "title": "%s has gone quiet" % job,
-					"body": "No heartbeat for %s; it promised one every %s.%s" % [_ago(now - j.last), _ago(j.every),
+			add_item({"kind": "blocker", "agent": j.agent, "title": "%s has gone quiet" % job,
+					"body": "No heartbeat for %s; it promised one every %s.%s" % [ago(now - j.last), ago(j.every),
 					("\nLast word: " + j.detail) if j.detail != "" else ""]})
 
 
-func _ago(sec: float) -> String:
+func ago(sec: float) -> String:
 	var s := int(sec)
 	if s < 60:
 		return "%ds" % s
@@ -728,91 +755,3 @@ func _unhandled_input(event: InputEvent) -> void:
 		if drag_moved:
 			var size := Vector2(LampArt.W, LampArt.H) * px
 			lamp_pos = (event.position + drag_off).clamp(Vector2.ZERO, Vector2(screen.size) - size)
-
-
-# --- HTTP inbox -------------------------------------------------------------------
-
-func _poll_http() -> void:
-	while server.is_listening() and server.is_connection_available():
-		conns.append({"peer": server.take_connection(), "buf": PackedByteArray(), "t": now})
-	for c in conns.duplicate():
-		var peer: StreamPeerTCP = c.peer
-		peer.poll()
-		if peer.get_status() != StreamPeerTCP.STATUS_CONNECTED or now - c.t > 5.0:
-			conns.erase(c)
-			continue
-		var n := peer.get_available_bytes()
-		if n > 0:
-			var got: Array = peer.get_partial_data(n)
-			if got[0] == OK:
-				var buf: PackedByteArray = c.buf
-				buf.append_array(got[1])
-				c.buf = buf
-		var req = _parse_request(c.buf)
-		if req == null:
-			continue
-		var res: Array = _route(req)
-		_respond(peer, res[0], res[1])
-		conns.erase(c)
-
-
-func _parse_request(buf: PackedByteArray):
-	var sep := -1
-	for i in range(buf.size() - 3):
-		if buf[i] == 13 and buf[i + 1] == 10 and buf[i + 2] == 13 and buf[i + 3] == 10:
-			sep = i
-			break
-	if sep < 0:
-		return null
-	var lines := buf.slice(0, sep).get_string_from_utf8().split("\r\n")
-	var first := lines[0].split(" ")
-	var length := 0
-	for i in range(1, lines.size()):
-		var kv := lines[i].split(":", true, 1)
-		if kv.size() == 2 and kv[0].strip_edges().to_lower() == "content-length":
-			length = kv[1].strip_edges().to_int()
-	var body_bytes := buf.slice(sep + 4)
-	if body_bytes.size() < length:
-		return null
-	var body = JSON.parse_string(body_bytes.slice(0, length).get_string_from_utf8()) if length > 0 else null
-	return {"method": first[0], "path": first[1] if first.size() > 1 else "", "body": body}
-
-
-func _route(req: Dictionary) -> Array:
-	var path: String = req.path.split("?")[0]
-	var b = req.body
-	if req.method == "GET" and path == "/status":
-		var watching := {}
-		for job in jobs:
-			watching[job] = {"agent": jobs[job].agent, "detail": jobs[job].detail, "seconds_since": int(now - jobs[job].last)}
-		return [200, {"pending": _pending().size(), "away": away, "watching": watching}]
-	if req.method == "POST" and path == "/poke":
-		if typeof(b) != TYPE_DICTIONARY or str(b.get("title", "")).strip_edges() == "":
-			return [400, {"error": "title is required"}]
-		return [200, {"id": _add_item(b).id}]
-	if req.method == "POST" and path == "/heartbeat":
-		if typeof(b) != TYPE_DICTIONARY or str(b.get("job", "")).strip_edges() == "":
-			return [400, {"error": "job is required"}]
-		var job := str(b.job).strip_edges()
-		if str(b.get("state", "running")) != "running":
-			jobs.erase(job)
-		else:
-			jobs[job] = {"agent": str(b.get("agent", "an agent")), "detail": str(b.get("detail", "")).left(200),
-					"every": maxf(10.0, float(b.get("every_s", 300))), "last": now, "quiet": false}
-		return [200, {"ok": true, "watching": jobs.size()}]
-	if req.method == "GET" and path.begins_with("/answer/"):
-		var id := path.get_slice("/", 2).to_int()
-		for it in items:
-			if it.id == id:
-				return [200, {"id": id, "status": it.status, "answer": it.answer}]
-		return [404, {"error": "no such poke"}]
-	return [404, {"error": "not found"}]
-
-
-func _respond(peer: StreamPeerTCP, code: int, data: Dictionary) -> void:
-	var body := JSON.stringify(data).to_utf8_buffer()
-	var reason: String = {200: "OK", 400: "Bad Request", 404: "Not Found"}.get(code, "OK")
-	var head := "HTTP/1.1 %d %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % [code, reason, body.size()]
-	peer.put_data(head.to_utf8_buffer())
-	peer.put_data(body)
-	peer.disconnect_from_host()

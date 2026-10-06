@@ -1,0 +1,14 @@
+{
+  "name": "genie-buddy",
+  "description": "Genie Buddy, a desktop genie your AI agents can summon.",
+  "owner": {
+    "name": "OzturkArda"
+  },
+  "plugins": [
+    {
+      "name": "genie-buddy",
+      "source": "./claude-plugin",
+      "description": "Connects Claude Code to Genie Buddy: the desktop genie pops out when a long turn finishes or Claude needs you, and agents get poke / heartbeat tools."
+    }
+  ]
+}
