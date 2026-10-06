@@ -23,9 +23,15 @@ func _draw() -> void:
 	var base := PackedVector2Array([Vector2(20, 24), Vector2(32, 24), Vector2(35, 29), Vector2(17, 29)])
 	var spout := PackedVector2Array([Vector2(36, 16), Vector2(46, 11), Vector2(55, 7), Vector2(51, 12), Vector2(40, 22)])
 	var lid := _ellipse(Vector2(26, 12), 6, 3)
+	# handle: a loop off the back whose ends run into the body, so it stays attached
+	var handle := PackedVector2Array([Vector2(19, 14)])
+	for i in 13:
+		var a := PI * 1.5 - PI * i / 12.0
+		handle.append(Vector2(11, 18) + Vector2(cos(a), sin(a)) * 5.0)
+	handle.append(Vector2(17, 23))
 	for o in [1.0, 0.0]:
 		var col: Color = OUTLINE if o else GOLD
-		draw_arc(Vector2(11, 18), 5.0, PI * 0.5, PI * 1.5, 12, col, 2.0 + o * 2.0)
+		draw_polyline(handle, col, 2.0 + o * 2.0)
 		for poly in [base, spout, body, lid]:
 			draw_colored_polygon(Geometry2D.offset_polygon(poly, o)[0] if o else poly, col)
 		draw_circle(Vector2(26, 8), 2.0 + o, col, true, -1.0, false)
