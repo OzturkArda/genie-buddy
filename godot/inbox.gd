@@ -36,6 +36,7 @@ var conns := []          # open requests still arriving: {peer, buf, t, continue
 var waiting := []        # MCP pokes holding their response until the user clicks: {peer, rpc_id, item_id, deadline}
 var mcp_clients := {}    # Mcp-Session-Id -> client name
 var turn_started := {}   # Claude Code session id -> when the current prompt was submitted
+var session_names := {}  # Claude Code session id -> the session's name, once found
 
 
 func _init(owner_genie: Node) -> void:
@@ -254,7 +255,12 @@ func _handle_hook(source: String, b: Dictionary) -> void:
 	match source:
 		"claude":
 			var sid := str(b.get("session_id", ""))
-			match str(b.get("hook_event_name", "")):
+			var event := str(b.get("hook_event_name", ""))
+			if event == "Stop" or event == "Notification":
+				var name := _session_name(sid, str(b.get("transcript_path", "")))
+				if name != "":
+					project = name
+			match event:
 				"UserPromptSubmit":
 					turn_started[sid] = genie.now
 				"Stop":
@@ -272,6 +278,38 @@ func _handle_hook(source: String, b: Dictionary) -> void:
 			if str(b.get("type", "")) == "agent-turn-complete":
 				genie.add_item({"kind": "info", "agent": "Codex · " + project, "title": "Codex finished its turn",
 						"body": str(b.get("last-assistant-message", "")).strip_edges().left(400)})
+
+
+# Claude Code records a session's name ("customTitle", or "agentName" for a background
+# job) in its transcript. Prefer it to the folder name, which is often a generic launcher.
+func _session_name(sid: String, path: String) -> String:
+	var found := _latest_title(path, 262144)
+	if found == "" and not session_names.has(sid):
+		found = _latest_title(path, 0)  # not in the tail: scan the whole file, once
+	if found != "":
+		session_names[sid] = found
+	return session_names.get(sid, "")
+
+
+func _latest_title(path: String, tail: int) -> String:
+	if path == "" or not FileAccess.file_exists(path):
+		return ""
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var size := f.get_length()
+	f.seek(maxi(0, size - tail) if tail > 0 else 0)
+	var lines := f.get_buffer(size - f.get_position()).get_string_from_utf8().split("\n", false)
+	var json := JSON.new()
+	for i in range(lines.size() - 1, -1, -1):
+		if not (lines[i].contains("\"customTitle\"") or lines[i].contains("\"agentName\"")):
+			continue
+		if json.parse(lines[i]) != OK or typeof(json.data) != TYPE_DICTIONARY:
+			continue
+		var title := str(json.data.get("customTitle", json.data.get("agentName", ""))).strip_edges()
+		if title != "":
+			return title.left(60)
+	return ""
 
 
 func _last_assistant_text(path: String) -> String:
