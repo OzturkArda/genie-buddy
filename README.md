@@ -177,7 +177,6 @@ packaging and testing. Contributions are welcome. What to expect:
 ## Known limitations
 
 - The genie shows a taskbar button while it runs.
-- The exe file uses Godot's icon; the window and tray use the genie's.
 - "Away" is judged by mouse movement only, so typing alone does not count as being present.
 - Messages are kept in memory, so quitting the genie forgets them.
 
