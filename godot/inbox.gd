@@ -36,6 +36,7 @@ var conns := []          # open requests still arriving: {peer, buf, t, continue
 var waiting := []        # MCP pokes holding their response until the user clicks: {peer, rpc_id, item_id, deadline}
 var mcp_clients := {}    # Mcp-Session-Id -> client name
 var turn_started := {}   # Claude Code session id -> when the current prompt was submitted
+var session_names := {}  # Claude Code session id -> the session's name, once found
 
 
 func _init(owner_genie: Node) -> void:
@@ -254,7 +255,12 @@ func _handle_hook(source: String, b: Dictionary) -> void:
 	match source:
 		"claude":
 			var sid := str(b.get("session_id", ""))
-			match str(b.get("hook_event_name", "")):
+			var event := str(b.get("hook_event_name", ""))
+			if event == "Stop" or event == "Notification":
+				var name := _session_name(sid, str(b.get("transcript_path", "")))
+				if name != "":
+					project = name
+			match event:
 				"UserPromptSubmit":
 					turn_started[sid] = genie.now
 				"Stop":
@@ -272,6 +278,51 @@ func _handle_hook(source: String, b: Dictionary) -> void:
 			if str(b.get("type", "")) == "agent-turn-complete":
 				genie.add_item({"kind": "info", "agent": "Codex · " + project, "title": "Codex finished its turn",
 						"body": str(b.get("last-assistant-message", "")).strip_edges().left(400)})
+
+
+# Claude Code records a session's name in its transcript: "customTitle" when the user names
+# it, "agentName" for a background job, "aiTitle" for the name it generates. Prefer them in
+# that order to the folder name, which is often a generic launcher.
+const TITLE_KEYS := ["customTitle", "agentName", "aiTitle"]
+
+
+func _session_name(sid: String, path: String) -> String:
+	# The first lookup scans the whole file; later ones only the tail, for renames.
+	var known: Dictionary = session_names.get(sid, {})
+	var found := _best_title(path, 262144 if not known.is_empty() else 0)
+	if found.title != "" and (known.is_empty() or found.rank <= known.rank):
+		session_names[sid] = found
+		known = found
+	return known.get("title", "")
+
+
+func _best_title(path: String, tail: int) -> Dictionary:
+	var best := {"title": "", "rank": TITLE_KEYS.size()}
+	if path == "" or not FileAccess.file_exists(path):
+		return best
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return best
+	var size := f.get_length()
+	f.seek(maxi(0, size - tail) if tail > 0 else 0)
+	var lines := f.get_buffer(size - f.get_position()).get_string_from_utf8().split("\n", false)
+	var json := JSON.new()
+	for i in range(lines.size() - 1, -1, -1):
+		for rank in mini(best.rank, TITLE_KEYS.size()):
+			if not lines[i].contains("\"%s\"" % TITLE_KEYS[rank]):
+				continue
+			if json.parse(lines[i]) != OK or typeof(json.data) != TYPE_DICTIONARY:
+				break
+			var title := str(json.data.get(TITLE_KEYS[rank], "")).strip_edges()
+			if title != "":
+				if title.length() > 60:
+					var cut := title.left(60).rfind(" ")
+					title = title.left(cut if cut > 30 else 59).strip_edges() + "…"
+				best = {"title": title, "rank": rank}
+				break
+		if best.rank == 0:
+			break
+	return best
 
 
 func _last_assistant_text(path: String) -> String:

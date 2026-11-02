@@ -185,19 +185,8 @@ func _label(size: int, bold: bool) -> Label:
 
 
 func _build_tray() -> void:
-	var img := Image.create(32, 32, false, Image.FORMAT_RGBA8)
-	for y in 32:
-		for x in 32:
-			var d := Vector2(x - 16, y - 18).length()
-			if d < 11:
-				img.set_pixel(x, y, Color("3a5fd0"))
-			if y >= 5 and y < 13 and absi(x - 16) < 11 - (13 - y):
-				img.set_pixel(x, y, Color("c0392b") if y % 3 else Color("e8b531"))
-	img.set_pixel(13, 18, Color.WHITE)
-	img.set_pixel(19, 18, Color.WHITE)
-	var big := img.duplicate()
-	big.resize(64, 64, Image.INTERPOLATE_NEAREST)
-	DisplayServer.set_icon(big)
+	var img := (load("res://icon.svg") as Texture2D).get_image()
+	img.resize(32, 32, Image.INTERPOLATE_LANCZOS)
 	tray = StatusIndicator.new()
 	tray.icon = ImageTexture.create_from_image(img)
 	tray.tooltip = "Genie Buddy — left click: rub the lamp, right click: menu"
